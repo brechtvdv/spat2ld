@@ -3,6 +3,12 @@ const jsonld = require('jsonld');
 const url = require('url');
 const http2 = require('http2');
 const fs = require('fs');
+var mqtt = require('mqtt')
+var client  = mqtt.connect('mqtt://146.253.51.199:30201')
+ 
+client.on('connect', function () {
+  client.subscribe('K648/spat/json', {'qos': 2})
+})
 
 const MILLIS_THIS_YEAR = moment([moment().year()]).valueOf();
 
@@ -38,14 +44,15 @@ const signalGroupContext = {
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
   };
 
-process.stdin.on('data', function (data) {
+// process.stdin.on('data', function (data) {
+client.on('message', function (topic, data) {
   try {
     if (data != null) {
       const spat =  JSON.parse(data);
     	const moy = spat.spat.intersections[0].moy; 
     	const timestamp = spat.spat.intersections[0].timeStamp;
-      const graphGeneratedAtString = calcTime(moy, timestamp).utc().format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-    	const graphGeneratedAtDate = calcTime(moy, timestamp).utc();
+      const graphGeneratedAtString = calcTime(moy, timestamp).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+    	const graphGeneratedAtDate = calcTime(moy, timestamp).utc().add(1, 'hour');
 
       const states = spat.spat.intersections[0].states;
       // console.log("------------------------")
@@ -56,21 +63,21 @@ process.stdin.on('data', function (data) {
         let signalGroupUri = "http://example.org/signalgroup/" + signalGroupNr;
       	let eventStateName = states[i]['state-time-speed'][0].eventState;
         let eventStateUri =  "http://example.org/eventstate/" + eventStateName;
-        let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-        let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-        let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc();
-        let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc();
+        let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+        let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+        let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour');
+        let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour');
 
         if (!minEndTimeSpat || minEndTimeDate.valueOf() < minEndTimeSpat.valueOf()) minEndTimeSpat = minEndTimeDate;
 
       	// Generate JSON-LD document
       	let doc = {
           "@context": signalGroupContext,
-      		"@id": "http://example.org/signalgroup/" + signalGroupNr + "?time=" + graphGeneratedAtString,
+      		"@id": signalGroupUri + "?time=" + graphGeneratedAtString,
           "generatedAt": graphGeneratedAtString,
       		"@graph": [
   				 {
-  			       "@id": "http://example.org/signalgroups/1",
+  			       "@id": signalGroupUri,
   			       "@type": "ex:signalgroup",
   			       "eventState": {
                   "@id": eventStateUri,
@@ -105,6 +112,12 @@ process.stdin.on('data', function (data) {
             // console.log("Previous state:" + currentSignalGroup.jsonld['@graph'][0].eventState['rdfs:label'] + "--- Now: " + eventStateName)
             counter++;
             // TODO Archive previous version
+            if (signalGroupUri === 'http://example.org/signalgroup/1') {
+                console.log(graphGeneratedAtString);
+                console.log((currentSignalGroup.minEndTimeDate.valueOf() - currentSignalGroup.graphGeneratedAtDate.valueOf())/1000)
+                console.log(currentSignalGroup.jsonld['@graph'][0].eventState['rdfs:label'] + ' - ' + currentSignalGroup.jsonld['@graph'][0].minEndTime)
+                console.log('-----------')
+            }
             // Update current version
             let newSignalGroup = {};
             newSignalGroup.jsonld = doc;
@@ -130,6 +143,7 @@ process.stdin.on('data', function (data) {
       // counter = 0;
     }
   } catch(error) {
+    console.error(data.toString());
       console.error(error);
   }
 });
@@ -145,27 +159,38 @@ function calcTime(moy, timestamp) {
 
 // SERVER
 const server = http2.createSecureServer({
-  key: fs.readFileSync('./keys/server.key'),
-  cert: fs.readFileSync('./keys/server.crt')
+  key: fs.readFileSync('./keys/localhost-privkey.pem'),
+  cert: fs.readFileSync('./keys/localhost-cert.pem')
 }, onRequest);
 server.on('error', (err) => console.error(err));
-
+process.on('uncaughtException', function (err) {
+  console.error(err.stack);
+  console.log("Node NOT Exiting...");
+});
 server.listen(3000);
 
 // Request handler
 function onRequest (req, res) {
-  const timeRequest = moment(); // when the request happens
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  const uri = url.parse(req.url, true).query.uri;
-  const signalGroup = signalGroups[uri];
+  try {
+    const timeRequest = moment(); // when the request happens
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const uri = url.parse(req.url, true).query.uri;
+    const signalGroup = signalGroups[uri];
 
-  if (signalGroup) {
-    // Calc max-age, relates to time of request
-    res.setHeader('Content-Type', 'application/ld+json');
-    res.setHeader('Cache-Control', 'public, max-age=' + Math.floor(signalGroup.maxAge));
-    res.end(JSON.stringify(signalGroup.jsonld));
-  } else {
-    res.writeHead(404, {});
-    res.end('Not found');
+    if (signalGroup) {
+      // Calc max-age, relates to time of request
+      res.setHeader('Content-Type', 'application/ld+json');
+
+      const maxAge = (signalGroup.minEndTimeDate.valueOf() - signalGroup.graphGeneratedAtDate.valueOf())/1000
+      res.setHeader('Cache-Control', 'public, max-age=' + Math.floor(maxAge));
+      res.end(JSON.stringify(signalGroup.jsonld));
+    } else {
+      res.writeHead(404, {});
+      res.end('Not found');
+    }
+  } catch (e) {
+    // console.error(e);
+    res.writeHead(500, {});
+    res.end('Failure')
   }
 }
