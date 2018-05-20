@@ -20,6 +20,8 @@ var counterChanges = 0;
 var counter = 0;
 var minEndTimeSpat;
 
+let listeners = [];
+
 // CONVERTER
 const signalGroupContext = {
     "generatedAt": {
@@ -44,11 +46,12 @@ const signalGroupContext = {
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
   };
 
-// process.stdin.on('data', function (data) {
-client.on('message', function (topic, data) {
+process.stdin.on('data', function (data) {
+// client.on('message', function (topic, data) {
   try {
     if (data != null) {
       const spat =  JSON.parse(data);
+      // console.log(spat)
     	const moy = spat.spat.intersections[0].moy; 
     	const timestamp = spat.spat.intersections[0].timeStamp;
       const graphGeneratedAtString = calcTime(moy, timestamp).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
@@ -91,6 +94,9 @@ client.on('message', function (topic, data) {
 
         // console.log(JSON.stringify(doc));
 
+        // Push to listeners SSE
+        sendUpdateToListeners(doc);
+
         // Check if version exists
         if(!signalGroups[signalGroupUri]){
           signalGroups[signalGroupUri] = {};
@@ -112,12 +118,12 @@ client.on('message', function (topic, data) {
             // console.log("Previous state:" + currentSignalGroup.jsonld['@graph'][0].eventState['rdfs:label'] + "--- Now: " + eventStateName)
             counter++;
             // TODO Archive previous version
-            if (signalGroupUri === 'http://example.org/signalgroup/1') {
-                console.log(graphGeneratedAtString);
-                console.log((currentSignalGroup.minEndTimeDate.valueOf() - currentSignalGroup.graphGeneratedAtDate.valueOf())/1000)
-                console.log(currentSignalGroup.jsonld['@graph'][0].eventState['rdfs:label'] + ' - ' + currentSignalGroup.jsonld['@graph'][0].minEndTime)
-                console.log('-----------')
-            }
+            // if (signalGroupUri === 'http://example.org/signalgroup/1') {
+            //     console.log(graphGeneratedAtString);
+            //     console.log((currentSignalGroup.minEndTimeDate.valueOf() - currentSignalGroup.graphGeneratedAtDate.valueOf())/1000)
+            //     console.log(currentSignalGroup.jsonld['@graph'][0].eventState['rdfs:label'] + ' - ' + currentSignalGroup.jsonld['@graph'][0].minEndTime)
+            //     console.log('-----------')
+            // }
             // Update current version
             let newSignalGroup = {};
             newSignalGroup.jsonld = doc;
@@ -148,6 +154,12 @@ client.on('message', function (topic, data) {
   }
 });
 
+function sendUpdateToListeners(_doc) {
+  listeners.forEach((client) => {
+    client.write("data: " + JSON.stringify(_doc) + '\n\n');
+  });
+}
+
 // timeOffset = 1/100 second (minEndTime, maxEndTime)
 function calcTimeWithOffset(moy, timestamp, timeOffset) {
 	return moment(MILLIS_THIS_YEAR + moy*60*1000 + timestamp + timeOffset * 100);
@@ -172,21 +184,31 @@ server.listen(3000);
 // Request handler
 function onRequest (req, res) {
   try {
-    const timeRequest = moment(); // when the request happens
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    const uri = url.parse(req.url, true).query.uri;
-    const signalGroup = signalGroups[uri];
-
-    if (signalGroup) {
-      // Calc max-age, relates to time of request
-      res.setHeader('Content-Type', 'application/ld+json');
-
-      const maxAge = (signalGroup.minEndTimeDate.valueOf() - signalGroup.graphGeneratedAtDate.valueOf())/1000
-      res.setHeader('Cache-Control', 'public, max-age=' + Math.floor(maxAge));
-      res.end(JSON.stringify(signalGroup.jsonld));
+    if (req.headers.accept.indexOf('text/event-stream') > -1) {
+      // SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      listeners.push(res);
+      res.on('close', () =>  {
+        listeners.splice( listeners.indexOf(res), 1 )
+      });
     } else {
-      res.writeHead(404, {});
-      res.end('Not found');
+      const timeRequest = moment(); // when the request happens
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      const uri = url.parse(req.url, true).query.uri;
+      const signalGroup = signalGroups[uri];
+
+      if (signalGroup) {
+        // Calc max-age, relates to time of request
+        res.setHeader('Content-Type', 'application/ld+json');
+
+        const maxAge = (signalGroup.minEndTimeDate.valueOf() - signalGroup.graphGeneratedAtDate.valueOf())/1000
+        res.setHeader('Cache-Control', 'public, max-age=' + Math.floor(maxAge));
+        res.end(JSON.stringify(signalGroup.jsonld));
+      } else {
+        res.writeHead(404, {});
+        res.end('Not found');
+      }
     }
   } catch (e) {
     // console.error(e);

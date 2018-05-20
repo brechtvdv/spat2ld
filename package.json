@@ -5,9 +5,10 @@
   "main": "spat_converter.js",
   "dependencies": {
     "jsonld": "^1.0.1",
-    "mqtt": "^2.18.0",
     "moment": "^2.22.1",
-    "querystring": "^0.2.0"
+    "mqtt": "^2.18.0",
+    "querystring": "^0.2.0",
+    "sse": "0.0.8"
   },
   "devDependencies": {},
   "scripts": {

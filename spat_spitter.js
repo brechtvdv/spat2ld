@@ -343,7 +343,8 @@ var spats = [{"header": {"stationID": "                K648", "messageID": 4, "p
 {"header": {"stationID": "                K648", "messageID": 4, "protocolVersion": 1}, "spat": {"intersections": [{"status": [2560, 16], "moy": 167630, "name": "Nationalestraat - Volkstraat", "timeStamp": 32340, "states": [{"signalGroup": 6, "movementName": "Signal E3", "state-time-speed": [{"timing": {"minEndTime": 460, "maxEndTime": 866}, "eventState": "unavailable"}]}, {"signalGroup": 7, "movementName": "Signal E", "state-time-speed": [{"timing": {"minEndTime": 540, "maxEndTime": 1146}, "eventState": "stop-And-Remain"}]}, {"signalGroup": 5, "movementName": "Signal D", "state-time-speed": [{"timing": {"minEndTime": 540, "maxEndTime": 1146}, "eventState": "stop-And-Remain"}]}, {"signalGroup": 4, "movementName": "Signal C", "state-time-speed": [{"timing": {"minEndTime": 30, "maxEndTime": 156}, "eventState": "protected-Movement-Allowed"}]}, {"signalGroup": 3, "movementName": "Signal B", "state-time-speed": [{"timing": {"minEndTime": 80, "maxEndTime": 206}, "eventState": "stop-And-Remain"}]}, {"signalGroup": 1, "movementName": "Signal A", "state-time-speed": [{"timing": {"minEndTime": 0, "maxEndTime": 126}, "eventState": "protected-Movement-Allowed"}]}], "id": {"region": 4660, "id": "               16088"}, "revision": 9}]}}]
 
 var i = 0;
+var length = spats.length;
 setInterval(function (){
-	console.log(JSON.stringify(spats[i]));
+	console.log(JSON.stringify(spats[i % length]));
 	i++;
 }, 1000)
