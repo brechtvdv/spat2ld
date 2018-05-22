@@ -179,7 +179,7 @@ process.on('uncaughtException', function (err) {
   console.error(err.stack);
   console.log("Node NOT Exiting...");
 });
-server.listen(3000);
+server.listen(3002);
 
 // Request handler
 function onRequest (req, res) {
