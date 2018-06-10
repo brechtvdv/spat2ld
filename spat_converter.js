@@ -46,8 +46,8 @@ const signalGroupContext = {
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
   };
 
-process.stdin.on('data', function (data) {
-// client.on('message', function (topic, data) {
+//process.stdin.on('data', function (data) {
+ client.on('message', function (topic, data) {
   try {
     if (data != null) {
       const spat =  JSON.parse(data);
@@ -104,7 +104,6 @@ process.stdin.on('data', function (data) {
           signalGroups[signalGroupUri].minEndTimeDate = minEndTimeDate;
           signalGroups[signalGroupUri].maxEndTimeDate = maxEndTimeDate;
           signalGroups[signalGroupUri].graphGeneratedAtDate = graphGeneratedAtDate;
-          signalGroups
         } else {
           let currentSignalGroup = signalGroups[signalGroupUri];
           // Check if this changes previous version
