@@ -46,8 +46,7 @@ const signalGroupContext = {
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
   };
 
-//process.stdin.on('data', function (data) {
- client.on('message', function (topic, data) {
+process.stdin.on('data', function (data) {
   try {
     if (data != null) {
       const spat =  JSON.parse(data);
@@ -92,7 +91,7 @@ const signalGroupContext = {
       		]
       	}
 
-        // console.log(JSON.stringify(doc));
+        console.log(JSON.stringify(doc));
 
         // Push to listeners SSE
         sendUpdateToListeners(doc);
