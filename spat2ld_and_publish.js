@@ -84,9 +84,9 @@ process.stdin.on('data', function (data) {
   			       "eventState": {
                   "@id": eventStateUri,
                   "@type": "EventState",
-                  "rdfs:label": eventStateName },
-  			       "minEndTime": minEndTimeString,
-  			       "maxEndTime": maxEndTimeString
+                  "rdfs:label": eventStateName,
+                  "minEndTime": minEndTimeString,
+                  "maxEndTime": maxEndTimeString }
   		     }
       		]
       	}
