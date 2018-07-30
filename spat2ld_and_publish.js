@@ -41,7 +41,6 @@ const signalGroupContext = {
       "@id": "ex:maxendtime",
       "@type": "http://www.w3.org/2001/XMLSchema#date"
     },
-    "fragmentGroup": "ex:fragmentGroup",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
   };
 
