@@ -128,17 +128,13 @@ function calcTime(moy, timestamp) {
 }
 
 // SERVER
-const server = http2.createSecureServer({
-  key: fs.readFileSync('./keys/localhost-privkey.pem'),
-  cert: fs.readFileSync('./keys/localhost-cert.pem'),
-  allowHTTP1: true
-}, onRequest);
+const server = http2.createServer({}, onRequest);
 server.on('error', (err) => console.error(err));
 process.on('uncaughtException', function (err) {
   console.error(err.stack);
   console.log("Node NOT Exiting...");
 });
-server.listen(3002);
+server.listen(3003);
 
 // Request handler
 function onRequest (req, res) {
