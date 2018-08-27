@@ -98,13 +98,13 @@ process.stdin.on('data', function (data) {
         if (maxAge < minMaxAgeTemp) minMaxAgeTemp = maxAge;
 
         responseTemp.push(doc);
-
-        // Push everything to listeners SSE
-        sendUpdateToListeners(doc);
       }
       response = responseTemp;
       minMaxAge = minMaxAgeTemp;
       //console.log(minMaxAge);
+
+      // Push everything to listeners SSE
+      sendUpdateToListeners(response);
     }
   } catch(error) {
     console.error(data.toString());
