@@ -1,23 +1,24 @@
 const moment = require('moment');
 const jsonld = require('jsonld');
 const url = require('url');
-const http2 = require('http2');
+//const http2 = require('http2');
+const http = require('http');
 const fs = require('fs');
 const md5 = require('md5');
+const N3 = require('n3');
+
+const { DataFactory } = N3;
+const { namedNode, literal, defaultGraph, quad } = DataFactory;
 
 const MILLIS_THIS_YEAR = moment([moment().year()]).valueOf();
 
-let signalGroups = [];
-let response = []; // add all json-ld objects in this
+let signalGroups = {};
+let response = []; // add all json-ld objects in this; contains latest updates
+let responseEmergencies = []; // add all json-ld objects in this who are irregular with the spat spec (e.g. emergencies)
+let emergenciesUpdated = false;
 let responseTemp = []; // replaces response when new message has been processed completely
 let minMaxAge = 100;
 let minMaxAgeTemp = 100;
-
-// Analytic purposes
-var counterNoChanges = 0;
-var counterChanges = 0;
-var counter = 0;
-var minEndTimeSpat;
 
 let listeners = [];
 
@@ -48,69 +49,138 @@ process.stdin.on('data', function (data) {
   try {
     if (data != null) {
       const spat = JSON.parse(data.toString().split('\n')[0]); // sometimes multiple SPAT messages in one data object
-    	const moy = spat.spat.intersections[0].moy; 
-    	const timestamp = spat.spat.intersections[0].timeStamp;
-      const graphGeneratedAtString = calcTime(moy, timestamp).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-    	const graphGeneratedAtDate = calcTime(moy, timestamp).utc().add(1, 'hour');
-
-      const states = spat.spat.intersections[0].states;
-
-      // reset response for every spat message
-      responseTemp = [];
-      minMaxAgeTemp = 100;
-
-      // console.log("------------------------")
-      for (let i=0; i<states.length; i++) {
-      	// Get data
-      	let movementName = states[i].movementName;
-      	let signalGroupNr = states[i].signalGroup;
-        let signalGroupUri = "http://example.org/signalgroup/" + signalGroupNr;
-      	let eventStateName = states[i]['state-time-speed'][0].eventState;
-        let eventStateUri =  "http://example.org/eventstate/" + eventStateName;
-        let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-        let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-        let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour');
-        let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour');
-
-        if (!minEndTimeSpat || minEndTimeDate.valueOf() < minEndTimeSpat.valueOf()) minEndTimeSpat = minEndTimeDate;
-
-      	// Generate JSON-LD document
-      	let doc = {
-          "@context": signalGroupContext,
-      		"@id": signalGroupUri + "?time=" + graphGeneratedAtString,
-          "generatedAt": graphGeneratedAtString,
-      		"@graph": [
-  				 {
-  			       "@id": signalGroupUri,
-  			       "@type": "ex:signalgroup",
-  			       "eventState": {
-                  "@id": eventStateUri,
-                  "@type": "EventState",
-                  "rdfs:label": eventStateName,
-                  "minEndTime": minEndTimeString,
-                  "maxEndTime": maxEndTimeString }
-  		     }
-      		]
-      	}
-
-        // For caching
-        const maxAge = (minEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000; // seconds
-        if (maxAge < minMaxAgeTemp) minMaxAgeTemp = maxAge;
-
-        responseTemp.push(doc);
-      }
-      response = responseTemp;
-      minMaxAge = minMaxAgeTemp;
-      //console.log(minMaxAge);
-
-      // Push everything to listeners SSE
-      sendUpdateToListeners(response);
+      
+      processSpat(spat);
     }
   } catch(error) {
     console.error(data.toString());
     console.error(error);
   }
 });
+
+async function processSpat(spat) {
+  const received = moment();
+  const moy = spat.spat.intersections[0].moy; 
+  const timestamp = spat.spat.intersections[0].timeStamp;
+  const graphGeneratedAtString = calcTime(moy, timestamp).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+  const graphGeneratedAtDate = calcTime(moy, timestamp).utc().add(1, 'hour');
+
+  const states = spat.spat.intersections[0].states;   
+
+  let responseTemp = [];
+  let minMaxAgeTemp = 100;
+
+  for (let i=0; i<states.length; i++) {
+    // Get data
+    let movementName = states[i].movementName;
+    let signalGroupNr = states[i].signalGroup;
+    let signalGroupUri = "http://example.org/signalgroup/" + signalGroupNr;
+    let eventStateName = states[i]['state-time-speed'][0].eventState;
+    let eventStateUri =  "http://example.org/eventstate/" + eventStateName;
+    let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+    let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+    let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour');
+    let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour');
+
+    // Generate JSON-LD document
+    const doc = {
+      "@context": signalGroupContext,
+      "@id": signalGroupUri + "?time=" + graphGeneratedAtString,
+      "generatedAt": graphGeneratedAtString,
+      "@graph": [
+       {
+           "@id": signalGroupUri,
+           "@type": "ex:signalgroup",
+           "eventState": {
+              "@id": eventStateUri,
+              "@type": "EventState",
+              "rdfs:label": eventStateName,
+              "minEndTime": minEndTimeString,
+              "maxEndTime": maxEndTimeString }
+       }
+      ]
+    }
+
+    // Don't use prefixes because timeseries server concatenates it to the file everytime
+    const graph = signalGroupUri + "?time=" + graphGeneratedAtString;
+    
+    await writeQuads(graph, graphGeneratedAtString, signalGroupUri, eventStateUri, eventStateName, minEndTimeString, maxEndTimeString);
+    // For caching
+    const maxAge = (minEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000; // seconds
+    if (maxAge < minMaxAgeTemp) minMaxAgeTemp = maxAge;
+
+    responseTemp.push(doc);
+
+    // When emergency, the minendtime becomes earlier or maxendtime becomes longer
+    if (signalGroups[signalGroupUri] && signalGroups[signalGroupUri].eventStateName === eventStateName
+      && ((minEndTimeDate.valueOf() + 10) < signalGroups[signalGroupUri].minEndTimeDate.valueOf() || maxEndTimeDate.valueOf() > (signalGroups[signalGroupUri].maxEndTimeDate.valueOf() + 10))) {
+      signalGroups[signalGroupUri].emergencyTimeDate = received; // time of detection
+      emergenciesUpdated = true;
+    }
+    
+    if (!signalGroups[signalGroupUri]) signalGroups[signalGroupUri] = {};
+
+    signalGroups[signalGroupUri]['minEndTimeDate'] = minEndTimeDate;
+    signalGroups[signalGroupUri]['maxEndTimeDate'] = maxEndTimeDate;  
+    signalGroups[signalGroupUri]['eventStateName'] = eventStateName;
+    signalGroups[signalGroupUri]['jsonld'] = doc;
+  }
+
+  response = responseTemp;
+  minMaxAge = minMaxAgeTemp;
+
+  // Push everything to listeners SSE
+  sendUpdateToListeners(response);
+}
+
+async function writeQuads(graph, graphGeneratedAtString, signalGroupUri, eventStateUri, eventStateName, minEndTimeString, maxEndTimeString) {
+  const writer = N3.Writer({ prefixes: {}});
+
+  // Generate N-Quads document for timeseries server
+  writer.addQuad(
+    namedNode(graph),
+    namedNode('http://www.w3.org/ns/prov#generatedAtTime'),
+    literal(graphGeneratedAtString, namedNode('http://www.w3.org/2001/XMLSchema#date'))
+  );
+  writer.addQuad(quad(
+    namedNode(signalGroupUri),
+    namedNode('http://www.w3.org/2000/01/rdf-schema#type'),
+    namedNode('http://example.org#signalgroup'),
+    namedNode(graph)
+  ));
+  writer.addQuad(quad(
+    namedNode(signalGroupUri),
+    namedNode('http://example.org#eventstate'),
+    namedNode(eventStateUri),
+    namedNode(graph)
+  ));
+  writer.addQuad(quad(
+    namedNode(eventStateUri),
+    namedNode('http://www.w3.org/2000/01/rdf-schema#type'),
+    namedNode('http://example.org#EventState'),
+    namedNode(graph)
+  ));
+  writer.addQuad(quad(
+    namedNode(eventStateUri),
+    namedNode('http://www.w3.org/2000/01/rdf-schema#label'),
+    literal(eventStateName, 'en'),
+    namedNode(graph)
+  ));
+  writer.addQuad(quad(
+    namedNode(eventStateUri),
+    namedNode('http://example.org#minEndTime'),
+    literal(minEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date')),
+    namedNode(graph)
+  ));
+  writer.addQuad(quad(
+    namedNode(eventStateUri),
+    namedNode('http://example.org#maxEndTime'),
+    literal(maxEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date')),
+    namedNode(graph)
+  ));
+
+  writer.end((error, result) => console.log(result));
+}
 
 function sendUpdateToListeners(_doc) {
   listeners.forEach((client) => {
@@ -128,10 +198,9 @@ function calcTime(moy, timestamp) {
 }
 
 // SERVER
-const server = http2.createSecureServer({
-  key: fs.readFileSync('./keys/localhost-privkey.pem'),
-  cert: fs.readFileSync('./keys/localhost-cert.pem'),
-  allowHTTP1: true
+const server = http.createServer({
+  /*key: fs.readFileSync('./keys/localhost-privkey.pem'),
+  cert: fs.readFileSync('./keys/localhost-cert.pem')*/
 }, onRequest);
 server.on('error', (err) => console.error(err));
 process.on('uncaughtException', function (err) {
@@ -143,17 +212,34 @@ server.listen(3002);
 // Request handler
 function onRequest (req, res) {
   try {
+    res.setHeader('Access-Control-Allow-Origin', '*');
     if (req.headers.accept.indexOf('text/event-stream') > -1) {
       // SSE
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Access-Control-Allow-Origin', '*');
       listeners.push(res);
       res.on('close', () =>  {
         listeners.splice( listeners.indexOf(res), 1 )
       });
+    } else if (req.url === '/emergencies') {
+      if (emergenciesUpdated) {
+        emergenciesUpdated = false;
+        let responseEmergenciesTemp = [];
+        let now = moment().valueOf();
+        // Construct response object with all emergencies in
+        for (let sg in signalGroups) {
+          if (typeof signalGroups[sg].emergencyTimeDate != 'undefined' && ((now - signalGroups[sg].emergencyTimeDate.valueOf()) < 16000)) {
+            responseEmergenciesTemp.push(signalGroups[sg].jsonld);
+          }
+        }
+        responseEmergencies = responseEmergenciesTemp;
+      }
+      res.setHeader('Content-Type', 'application/ld+json');
+      let etag = 'W/"' + md5(responseEmergencies) + '"';
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'public, must-revalidate');
+      res.end(JSON.stringify(responseEmergencies));
     } else {
       // Regular request
-      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Type', 'application/ld+json');
       let etag = 'W/"' + md5(response) + '"';
       res.setHeader('ETag', etag);
