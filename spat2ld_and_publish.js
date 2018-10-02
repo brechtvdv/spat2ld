@@ -19,7 +19,7 @@ let emergenciesUpdated = false;
 let responseTemp = []; // replaces response when new message has been processed completely
 let minMaxAge = 100;
 let minMaxAgeTemp = 100;
-
+let minMaxAgePerSg = {};
 let listeners = [];
 
 // CONVERTER
@@ -108,6 +108,7 @@ async function processSpat(spat) {
     // For caching
     const maxAge = (minEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000; // seconds
     if (maxAge < minMaxAgeTemp) minMaxAgeTemp = maxAge;
+    minMaxAgePerSg[signalGroupUri] = maxAge;
 
     responseTemp.push(doc);
 
@@ -179,7 +180,7 @@ async function writeQuads(graph, graphGeneratedAtString, signalGroupUri, eventSt
     namedNode(graph)
   ));
 
-  writer.end((error, result) => console.log(result));
+  //writer.end((error, result) => console.log(result));
 }
 
 function sendUpdateToListeners(_doc) {
@@ -213,6 +214,7 @@ server.listen(3002);
 function onRequest (req, res) {
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');
+    let params = url.parse(req.url, true);
     if (req.headers.accept.indexOf('text/event-stream') > -1) {
       // SSE
       res.setHeader('Content-Type', 'text/event-stream');
@@ -238,6 +240,23 @@ function onRequest (req, res) {
       res.setHeader('ETag', etag);
       res.setHeader('Cache-Control', 'public, must-revalidate');
       res.end(JSON.stringify(responseEmergencies));
+    } else if (params.query.signalgroup) {
+      let responseSg = [];
+      let minMaxAgeSg = 20;
+      let sgs = []; // list of signalgroups that match query param
+      if (!Array.isArray(params.query.signalgroup)) sgs.push(params.query.signalgroup);
+      else sgs = params.query.signalgroup;
+      sgs.forEach((sg) => {
+        if (sg['@graph'][0]['@id'] === sg) {
+          console.log(sg)
+          responseSG.push(sg);
+          //if (minMaxAgePerSg[sg] && minMaxAgePerSg[sg] < minMaxAgeSg) minMaxAgeSg = minMaxAgePerSg[sg];
+        }
+      });
+      console.log(responseSg);
+      //res.setHeader('Cache-Control', 'public, max-age=' + Math.floor(minMaxAgeSg));
+      res.setHeader('Content-Type', 'application/ld+json');
+      res.end(JSON.stringify(responseSg));
     } else {
       // Regular request
       res.setHeader('Content-Type', 'application/ld+json');
