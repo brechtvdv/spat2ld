@@ -47,53 +47,56 @@ async function processSpat(spat) {
   let hasUpdate = false; // indicates that this SPAT message contains an update
 
   for (let i=0; i<states.length; i++) {
-    // Get data
-    let movementName = states[i].movementName;
-    let signalGroupNr = states[i].signalGroup;
-    let signalGroupUri = "https://opentrafficlights.org/id/signalgroup/K648/" + signalGroupNr;
-    let signalPhaseLabel = states[i]['state-time-speed'][0].eventState;
-    let signalPhaseUri = convertSignalLabelToConcept(signalPhaseLabel);
-    let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-    let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
-    let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour');
-    let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour');
+    // If timing is defined
+    if (states[i]['state-time-speed'][0].timing) {
+      // Get data
+      let movementName = states[i].movementName;
+      let signalGroupNr = states[i].signalGroup;
+      let signalGroupUri = "https://opentrafficlights.org/id/signalgroup/K648/" + signalGroupNr;
+      let signalPhaseLabel = states[i]['state-time-speed'][0].eventState;
+      let signalPhaseUri = convertSignalLabelToConcept(signalPhaseLabel);
+      let minEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+      let maxEndTimeString = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour').format("YYYY-MM-DDTHH:mm:ss.SSS") + "Z";
+      let minEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.minEndTime).utc().add(1, 'hour');
+      let maxEndTimeDate = calcTimeWithOffset(moy, timestamp, states[i]['state-time-speed'][0].timing.maxEndTime).utc().add(1, 'hour');
 
-    let min = Math.round((minEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000);
-    let max = Math.round((maxEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000);
+      let min = Math.round((minEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000);
+      let max = Math.round((maxEndTimeDate.valueOf() - graphGeneratedAtDate.valueOf())/1000);
 
-    // The view (label, min or max) has changed
-    if (signalGroups[signalGroupUri] && 
-      (signalGroups[signalGroupUri].signalPhaseLabel != signalPhaseLabel 
-      || signalGroups[signalGroupUri].min != min
-      || signalGroups[signalGroupUri].max != max)) {
-      hasUpdate = true;
+      // The view (label, min or max) has changed
+      if (signalGroups[signalGroupUri] && 
+        (signalGroups[signalGroupUri].signalPhaseLabel != signalPhaseLabel 
+        || signalGroups[signalGroupUri].min != min
+        || signalGroups[signalGroupUri].max != max)) {
+        hasUpdate = true;
 
-      // Generate N-Quads document for timeseries server
-      writer.addQuad(quad(
-        namedNode(signalGroupUri),
-        namedNode('https://w3id.org/opentrafficlights#signalState'),
-        writer.blank([{
-            predicate: namedNode('http://www.w3.org/2000/01/rdf-schema#type'),
-            object:    namedNode('https://w3id.org/opentrafficlights#SignalState')
-          },
-          {
-            predicate: namedNode('https://w3id.org/opentrafficlights#signalPhase'),
-            object:    namedNode(signalPhaseUri)
-          },{
-            predicate: namedNode('https://w3id.org/opentrafficlights#minEndTime'),
-            object:    literal(minEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date'))
-          },{
-            predicate: namedNode('https://w3id.org/opentrafficlights#maxEndTime'),
-            object:    literal(maxEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date'))
-          }]),
-        namedNode(graphUri)
-      ));
+        // Generate N-Quads document for timeseries server
+        writer.addQuad(quad(
+          namedNode(signalGroupUri),
+          namedNode('https://w3id.org/opentrafficlights#signalState'),
+          writer.blank([{
+              predicate: namedNode('http://www.w3.org/2000/01/rdf-schema#type'),
+              object:    namedNode('https://w3id.org/opentrafficlights#SignalState')
+            },
+            {
+              predicate: namedNode('https://w3id.org/opentrafficlights#signalPhase'),
+              object:    namedNode(signalPhaseUri)
+            },{
+              predicate: namedNode('https://w3id.org/opentrafficlights#minEndTime'),
+              object:    literal(minEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date'))
+            },{
+              predicate: namedNode('https://w3id.org/opentrafficlights#maxEndTime'),
+              object:    literal(maxEndTimeString, namedNode('http://www.w3.org/2001/XMLSchema#date'))
+            }]),
+          namedNode(graphUri)
+        ));
+      }
+    
+      if (!signalGroups[signalGroupUri]) signalGroups[signalGroupUri] = {};
+      signalGroups[signalGroupUri]['min'] = min;
+      signalGroups[signalGroupUri]['max'] = max;  
+      signalGroups[signalGroupUri]['signalPhaseLabel'] = signalPhaseLabel;
     }
-  
-    if (!signalGroups[signalGroupUri]) signalGroups[signalGroupUri] = {};
-    signalGroups[signalGroupUri]['min'] = min;
-    signalGroups[signalGroupUri]['max'] = max;  
-    signalGroups[signalGroupUri]['signalPhaseLabel'] = signalPhaseLabel;
   }
 
   if (hasUpdate) writer.end((error, result) => console.log(result));
