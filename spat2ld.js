@@ -120,16 +120,21 @@ function convertSignalLabelToConcept(label) {
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/1";
       break;
     case "Stop-Then-Proceed":
+    case "stop-Then-Proceed":
+    case "Stop Then Proceed":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/2";
       break;
     case "Stop And Remain":
     case "stop-And-Remain":
+    case "Stop-And-Remain":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/3";
       break;
     case "Pre-Movement":
+    case "pre Movement"
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/4";
       break;
     case "Permissive Movement Allowed":
+    case "permissive-Movement-Allowed"
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/5";
       break;
     case "Protected Movement Allowed":
@@ -137,9 +142,11 @@ function convertSignalLabelToConcept(label) {
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/6";
       break;
     case "Permissive Clearance":
+    case "permissive-Clearance":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/7";
       break;
     case "Protected Clearance":
+    case "protected-Clearance":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/8";
       break;
     case "Caution Conflicting Traffic (Flashing)":
