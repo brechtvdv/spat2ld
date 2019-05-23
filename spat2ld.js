@@ -130,11 +130,11 @@ function convertSignalLabelToConcept(label) {
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/3";
       break;
     case "Pre-Movement":
-    case "pre Movement"
+    case "pre Movement":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/4";
       break;
     case "Permissive Movement Allowed":
-    case "permissive-Movement-Allowed"
+    case "permissive-Movement-Allowed":
       return "https://w3id.org/opentrafficlights/thesauri/signalphase/5";
       break;
     case "Protected Movement Allowed":
